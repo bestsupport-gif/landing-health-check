@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const cron = require('node-cron');
 const store = require('./store');
 const { runCheck } = require('./runner');
+const { closeBrowser } = require('./browser');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -44,6 +45,8 @@ function enqueue(advertiserId, trigger) {
       log(`오류: ${e.message}`);
       job.status = 'error';
     }
+    // 점검이 끝나면 Chromium 을 내려 메모리를 돌려준다
+    await closeBrowser();
     job.finishedAt = new Date().toISOString();
   });
   // 오래된 작업 정리
@@ -70,6 +73,7 @@ function sanitize(body, base = {}) {
     naverKeywords: list(body.naverKeywords ?? base.naverKeywords),
     metaPageIds: list(body.metaPageIds ?? base.metaPageIds),
     googleAdvertiserIds: list(body.googleAdvertiserIds ?? base.googleAdvertiserIds),
+    googleQuery: String(body.googleQuery ?? base.googleQuery ?? '').trim(),
     platforms: {
       meta: body.platforms?.meta ?? base.platforms?.meta ?? true,
       google: body.platforms?.google ?? base.platforms?.google ?? true,
@@ -179,4 +183,9 @@ if (CRON_EXPR !== 'off') {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`랜딩 헬스체크 http://localhost:${PORT} (정기점검: ${CRON_EXPR})`));
+app.listen(PORT, () => {
+  console.log(`랜딩 헬스체크 http://localhost:${PORT} (정기점검: ${CRON_EXPR})`);
+  // 결과가 없는 광고주(첫 실행·재시작 직후 기본 광고주 등)는 바로 점검
+  const db = store.load();
+  for (const a of db.advertisers) if (!db.runs[a.id]) enqueue(a.id, 'startup');
+});

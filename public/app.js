@@ -1,8 +1,9 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PL = { meta: 'Meta', google: 'Google', naver: 'Naver' };
-const LV = { critical: 'OFF 제안', warn: '점검 필요', info: '수동 확인', ok: '정상' };
-const TYPE = { error: '404/접속오류', soft404: '페이지 없음', soldout: '품절', soldout_suspect: '품절 의심', price_change: '가격 변경', price_mismatch: '가격 불일치', utm_missing: 'UTM 누락', redirect_home: '메인 리다이렉트', blocked: '확인 불가', no_url: 'URL 비공개', skipped: '점검 제외' };
+const PAGE = { product: '상품 직랜딩', listing: '기획전/목록', other: '일반 페이지' };
+const LV = { critical: 'OFF/랜딩 수정', warn: '점검 필요', info: '수동 확인', ok: '정상' };
+const TYPE = { error: '404/접속오류', soft404: '페이지 없음', soldout: '품절', soldout_suspect: '일부 옵션 품절', price_change: '가격 변경', price_mismatch: '가격 불일치', utm_missing: 'UTM 누락', redirect_home: '메인 리다이렉트', blocked: '확인 불가', no_url: 'URL 비공개', skipped: '점검 제외' };
 
 let advertisers = [];
 let current = location.hash.slice(1) || null;
@@ -94,7 +95,7 @@ function render() {
     <div id="jobLog"></div>
     ${run ? `
     <div class="stats">
-      <div class="stat crit"><div class="k">OFF 제안 (404·품절)</div><div class="v">${s.critical}</div></div>
+      <div class="stat crit"><div class="k">OFF/랜딩 수정 (404·직랜딩 품절)</div><div class="v">${s.critical}</div></div>
       <div class="stat warn"><div class="k">점검 필요 (가격·UTM)</div><div class="v">${s.warn}</div></div>
       <div class="stat ok"><div class="k">정상</div><div class="v">${s.ok}</div></div>
       <div class="stat"><div class="k">집행 소재</div><div class="v">${s.ads}</div></div>
@@ -104,7 +105,7 @@ function render() {
       ${run.platformStatus.naver?.ok && run.platformStatus.naver.ads === 0 ? '<span class="plat">네이버 파워링크에서 못 찾았다면 설정에서 네이버 키워드·도메인을 추가하세요</span>' : ''}
     </div>
     <div class="filters">
-      ${[['issue', '이슈만'], ['critical', 'OFF 제안'], ['warn', '점검 필요'], ['ok', '정상'], ['info', '수동 확인'], ['all', '전체']].map(([k, l]) =>
+      ${[['issue', '이슈만'], ['critical', 'OFF/랜딩 수정'], ['warn', '점검 필요'], ['ok', '정상'], ['info', '수동 확인'], ['all', '전체']].map(([k, l]) =>
         `<button data-level="${k}" class="${filter.level === k ? 'on' : ''}">${l}</button>`).join('')}
       <select id="fPlat"><option value="">전체 매체</option>${Object.keys(PL).map(p => `<option value="${p}" ${filter.platform === p ? 'selected' : ''}>${PL[p]}</option>`).join('')}</select>
       <select id="fType"><option value="">전체 이슈 유형</option>${types.map(([t, n]) => `<option value="${t}" ${filter.type === t ? 'selected' : ''}>${TYPE[t] || t} (${n})</option>`).join('')}</select>
@@ -134,7 +135,7 @@ function rowHtml(r) {
     <td><ul class="issues">${r.issues.length ? r.issues.map(i => `<li class="${i.level}">${esc(i.msg)}</li>`).join('') : '<li class="info">문제 없음</li>'}</ul></td>
     <td class="url">${r.landingUrl ? `<a href="${esc(r.landingUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.landingUrl)}</a>` : '-'}
       ${r.finalUrl && r.finalUrl !== r.landingUrl ? `<div class="fin">→ ${esc(r.finalUrl)}</div>` : ''}
-      ${r.httpStatus ? `<div class="fin">HTTP ${r.httpStatus}${r.pageTitle ? ' · ' + esc(r.pageTitle.slice(0, 40)) : ''}</div>` : ''}</td>
+      ${r.httpStatus ? `<div class="fin">HTTP ${r.httpStatus}${r.pageType ? ' · ' + PAGE[r.pageType] : ''}${r.pageTitle ? ' · ' + esc(r.pageTitle.slice(0, 40)) : ''}</div>` : ''}</td>
     <td>${r.price ? r.price.toLocaleString('ko-KR') + '원' : '-'}</td>
   </tr>`;
 }
@@ -193,7 +194,7 @@ async function edit() {
 $('#addForm').onsubmit = async e => {
   e.preventDefault();
   const f = new FormData(e.target);
-  const body = Object.fromEntries(['name', 'aliases', 'domains', 'naverKeywords', 'metaPageIds', 'googleAdvertiserIds'].map(k => [k, f.get(k)]));
+  const body = Object.fromEntries(['name', 'aliases', 'domains', 'naverKeywords', 'googleQuery', 'metaPageIds', 'googleAdvertiserIds'].map(k => [k, f.get(k)]));
   body.platforms = { meta: !!f.get('meta'), google: !!f.get('google'), naver: !!f.get('naver') };
   const btn = e.target.querySelector('button'); btn.disabled = true;
   try {

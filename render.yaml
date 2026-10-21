@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/deploy?repo=https://github.com/bestsupport-gif/landing-health-check
+services:
+  - type: web
+    name: landing-health-check
+    runtime: docker
+    plan: free            # 데이터 유지·상시 구동이 필요하면 starter + disk(/data) 로 변경
+    region: singapore
+    healthCheckPath: /healthz
+    envVars:
+      - key: CHECK_CRON
+        value: "0 */6 * * *"
+      - key: BROWSER_CONCURRENCY
+        value: "1"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=256"
+      - key: ADMIN_PASSWORD
+        sync: false       # 대시보드에서 직접 입력 (비우면 인증 없이 공개)
+      - key: SLACK_WEBHOOK_URL
+        sync: false

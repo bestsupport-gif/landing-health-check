@@ -22,11 +22,18 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\.|^m\./, ''); } catch { return ''; }
 }
 
+// domains 항목에 경로가 있으면(예: brand.naver.com/hera) 경로 앞부분까지 비교한다
 function domainMatches(url, domains) {
   const h = hostOf(url);
-  return !!h && domains.some(d => {
-    const x = String(d).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\.|^m\./, '').replace(/\/.*$/, '');
-    return x && (h === x || h.endsWith('.' + x));
+  if (!h) return false;
+  let path = '';
+  try { path = new URL(url).pathname.toLowerCase(); } catch {}
+  return domains.some(d => {
+    const x = String(d).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\.|^m\./, '');
+    const [host, ...rest] = x.split('/');
+    const p = rest.length ? '/' + rest.join('/').replace(/\/+$/, '') : '';
+    if (!host || !(h === host || h.endsWith('.' + host))) return false;
+    return !p || path === p || path.startsWith(p + '/');
   });
 }
 

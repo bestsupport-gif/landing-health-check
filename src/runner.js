@@ -11,7 +11,7 @@ const CRAWLERS = { meta: crawlMeta, google: crawlGoogle, naver: crawlNaver };
 const LEVEL_RANK = { critical: 3, warn: 2, info: 1, ok: 0 };
 // Meta 인스턴트 경험(캔버스) 등 외부 랜딩이 아닌 링크는 점검 대상에서 뺀다
 const SKIP_URL_RE = /^https?:\/\/(www\.|m\.|l\.)?(fb\.com|facebook\.com|fb\.me|instagram\.com)\//i;
-const ACTION = { critical: 'OFF 제안', warn: '점검 필요', info: '수동 확인', ok: '유지' };
+const ACTION = { critical: 'OFF/랜딩 수정', warn: '점검 필요', info: '수동 확인', ok: '유지' };
 
 function fmt(n) { return Number(n).toLocaleString('ko-KR'); }
 
@@ -97,6 +97,7 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
         finalUrl: r?.finalUrl || null,
         httpStatus: r?.httpStatus ?? null,
         price: r?.price ?? null,
+        pageType: r?.pageType || null,
         pageTitle: r?.title || '',
         issues,
         level,

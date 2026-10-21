@@ -11,6 +11,28 @@ const TRACKING_PARAMS = /^(utm_|fbclid|gclid|gbraid|wbraid|n_|nt_|NaPm|af_|pid$|
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign'];
 
+// 랜딩 유형: 상품 상세(직랜딩) vs 기획전/카테고리/목록(여러 상품)
+const PRODUCT_URL_RE = /goodsview|getgoodsdetail|goods_?detail|\/goods\/\d|[?&]goodsno=|product_no=|\/products?\/[\w-]+|\/product\/detail|detail\.html|\/item\/|\/itemview|\/vp\/products|\/catalog\/\d|[?&](itemid|prdno|productid|goodscode|goods_cd)=/i;
+const LISTING_URL_RE = /planshop|plan\/|exhibition|exhibit|event|promotion|promo|campaign|special|category|categories|collection|\/list|search|brand\/|brandshop|\/display\/|\/theme|benefit|sale\b|기획전|이벤트/i;
+const PRODUCT_LINK_RE = /goodsview|getgoodsdetail|goods_?detail|goodsno=|product_no=|\/products?\/|detail\.html|\/item\//i;
+
+function classifyPage($, url, ldTypes) {
+  const isProductUrl = PRODUCT_URL_RE.test(url);
+  const isListingUrl = LISTING_URL_RE.test(url) && !isProductUrl;
+  const ogType = ($('meta[property="og:type"]').attr('content') || '').toLowerCase();
+  // 서로 다른 상품 상세로 가는 링크 수 (목록/기획전이면 많다)
+  const links = new Set();
+  $('a[href]').each((_, a) => {
+    const h = $(a).attr('href') || '';
+    if (PRODUCT_LINK_RE.test(h)) links.add(h.replace(/[#].*$/, '').replace(/&(utm_|t_|trk|dispcatno|rccode)[^&]*/gi, ''));
+  });
+  const productLinks = links.size;
+  if (isListingUrl) return { type: 'listing', productLinks };
+  if (isProductUrl || ogType.includes('product') || ldTypes.includes('product')) return { type: 'product', productLinks };
+  if (ldTypes.includes('itemlist') || productLinks >= 8) return { type: 'listing', productLinks };
+  return { type: 'other', productLinks };
+}
+
 function urlKey(u) {
   try {
     const url = new URL(u);
@@ -75,8 +97,15 @@ function analyzeHtml(html, finalUrl) {
 
   // 1) 구조화 데이터 (JSON-LD)
   const ld = { prices: [], avail: [] };
+  const ldTypes = [];
   $('script[type="application/ld+json"]').each((_, s) => {
-    try { walkJsonLd(JSON.parse($(s).html()), ld); } catch {}
+    try {
+      const j = JSON.parse($(s).html());
+      walkJsonLd(j, ld);
+      for (const n of [j, ...(Array.isArray(j) ? j : []), ...(j['@graph'] || [])]) {
+        if (n && n['@type']) ldTypes.push(...[].concat(n['@type']).map(t => String(t).toLowerCase()));
+      }
+    } catch {}
   });
   signals.prices.push(...ld.prices.map(p => ({ v: p, src: 'JSON-LD' })));
   if (ld.avail.length && ld.avail.every(a => /OutOfStock|SoldOut|Discontinued/i.test(a))) signals.soldStrong.push('JSON-LD availability=OutOfStock');
@@ -113,7 +142,8 @@ function analyzeHtml(html, finalUrl) {
   const hit = [...heads, ...alerts].find(t => SOFT404_RE.test(t));
   if (hit) signals.soft404 = hit.slice(0, 80);
 
-  return { title, signals, textLength: $('body').text().replace(/\s+/g, ' ').length };
+  const page = classifyPage($, finalUrl, ldTypes);
+  return { title, signals, page, textLength: $('body').text().replace(/\s+/g, ' ').length };
 }
 
 async function fetchPage(url) {
@@ -177,7 +207,7 @@ async function checkUrl(url, { useBrowserFallback = true } = {}) {
     }
   }
 
-  const out = { url, finalUrl: res.finalUrl, httpStatus: res.status, via: res.via, title: '', price: null, issues };
+  const out = { url, finalUrl: res.finalUrl, httpStatus: res.status, via: res.via, title: '', price: null, pageType: null, issues };
 
   if (res.status === 0) {
     issues.push({ type: 'error', level: 'critical', msg: `접속 실패 (${res.error || '응답 없음'})` });
@@ -196,17 +226,29 @@ async function checkUrl(url, { useBrowserFallback = true } = {}) {
     return out;
   }
 
+  // 스마트스토어 등은 봇 접속을 로그인 페이지로 돌려보낸다 → 판정 불가
+  if (/(^|\.)nid\.naver\.com$/.test(new URL(res.finalUrl).hostname) && !/nid\.naver\.com/.test(url)) {
+    issues.push({ type: 'blocked', level: 'info', msg: '네이버 로그인 페이지로 이동 (스마트스토어 봇 차단, 수동 확인 필요)' });
+    return out;
+  }
+
   const a = analyzeHtml(res.html, res.finalUrl);
   out.title = a.title;
-  out.price = pickPrice(a.signals.prices);
+  out.pageType = a.page.type;
 
   if (a.signals.soft404) issues.push({ type: 'soft404', level: 'critical', msg: `페이지 없음/판매종료 문구: "${a.signals.soft404}"` });
 
-  if (a.signals.soldStrong.length) {
-    issues.push({ type: 'soldout', level: 'critical', msg: `품절 (${a.signals.soldStrong[0]})` });
-  } else if (a.signals.soldText.length) {
-    if (a.signals.buy === 0) issues.push({ type: 'soldout', level: 'critical', msg: `품절 (화면 문구 "${a.signals.soldText[0]}", 구매 버튼 없음)` });
-    else issues.push({ type: 'soldout_suspect', level: 'warn', msg: `품절 의심 (화면 문구 "${a.signals.soldText[0]}" — 일부 옵션 품절일 수 있음)` });
+  // 품절·가격은 상품 직랜딩에서만 판정한다.
+  // 기획전/여러 상품 목록은 개별 상품 품절 표시가 섞여 있어 판정하지 않는다(점검 필요로 띄우지 않음).
+  if (a.page.type === 'product') {
+    out.price = pickPrice(a.signals.prices);
+    const fix = ' — 랜딩 수정 필요 (대체 상품으로 교체 또는 소재 OFF)';
+    if (a.signals.soldStrong.length) {
+      issues.push({ type: 'soldout', level: 'critical', msg: `상품 직랜딩 품절 (${a.signals.soldStrong[0]})${fix}` });
+    } else if (a.signals.soldText.length) {
+      if (a.signals.buy === 0) issues.push({ type: 'soldout', level: 'critical', msg: `상품 직랜딩 품절 (화면 "${a.signals.soldText[0]}", 구매 버튼 없음)${fix}` });
+      else issues.push({ type: 'soldout_suspect', level: 'warn', msg: '일부 옵션 품절 — 구매는 가능 (소재에 나온 컬러/호수가 품절인지 확인)' });
+    }
   }
 
   if (!isHomePath(url) && isHomePath(res.finalUrl) && new URL(url).pathname.length > 12) {

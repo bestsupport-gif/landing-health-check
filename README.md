@@ -5,15 +5,20 @@ API 연동 없이 각 매체의 **공개 광고 라이브러리를 크롤링**�
 
 | 점검 항목 | 판정 | 제안 |
 |---|---|---|
-| 404 / 410 / 5xx / 접속 실패 | 🔴 critical | OFF 제안 |
-| 페이지 없음·판매종료 문구 (소프트 404) | 🔴 critical | OFF 제안 |
-| 품절 (JSON-LD·메타태그·스마트스토어 상태값, 또는 '품절' 표시 + 구매버튼 없음) | 🔴 critical | OFF 제안 |
-| 품절 의심 (품절 문구는 있으나 구매버튼도 있음 → 옵션 품절 가능) | 🟡 warn | 점검 필요 |
-| 가격 변경 (직전 점검 대비) | 🟡 warn | 점검 필요 |
+| 404 / 410 / 5xx / 접속 실패 | 🔴 critical | OFF/랜딩 수정 |
+| 페이지 없음·판매종료 문구 (소프트 404) | 🔴 critical | OFF/랜딩 수정 |
+| **상품 직랜딩** 품절 (JSON-LD·메타태그·스마트스토어 상태값, 또는 '품절' 표시 + 구매버튼 없음) | 🔴 critical | OFF/랜딩 수정 |
+| 상품 직랜딩의 일부 옵션 품절 (구매 버튼은 살아 있음) | 🟡 warn | 점검 필요 |
+| 가격 변경 (직전 점검 대비, 상품 직랜딩만) | 🟡 warn | 점검 필요 |
 | 광고 문구 가격 ≠ 랜딩 가격 | 🟡 warn | 점검 필요 |
 | UTM 누락 (`utm_source`/`utm_medium`/`utm_campaign`) | 🟡 warn | 점검 필요 |
 | 상품 URL → 메인 페이지 리다이렉트 | 🟡 warn | 점검 필요 |
 | 봇 차단 등으로 확인 불가 | ⚪ info | 수동 확인 |
+
+**랜딩 유형 구분**: URL 패턴·`og:type`·JSON-LD·상품 링크 수로 `상품 직랜딩` / `기획전·목록` / `일반 페이지`를 나눕니다.
+품절·가격 판정은 **상품 직랜딩에만** 적용합니다. 기획전이나 여러 상품이 모인 랜딩은 개별 상품 품절 표시가 있어도 '점검 필요'로 띄우지 않습니다 (404·페이지 없음은 그대로 점검).
+
+**기본 광고주**: `헤라` (도메인 `hera.com`, `brand.naver.com/hera`) 가 자동 등록되고 서버 시작 시 바로 점검합니다. `src/store.js` 의 `DEFAULT_ADVERTISERS` 에서 바꿀 수 있습니다.
 
 결과는 화면과 **CSV(소재별 On/Off 제안)**, `report.json` 으로 내보낼 수 있어 소재 On/Off 제안 자동화에 바로 연결할 수 있습니다.
 새로 생긴 이슈만 슬랙으로 알립니다.
@@ -23,7 +28,7 @@ API 연동 없이 각 매체의 **공개 광고 라이브러리를 크롤링**�
 | 매체 | 소스 | 랜딩 URL | 비고 |
 |---|---|---|---|
 | Meta | [광고 라이브러리](https://www.facebook.com/ads/library/) (헤드리스 Chromium) | 소재의 `link_url` (l.facebook.com 래핑 해제) | 광고주명 키워드 검색 → 페이지명이 일치하는 광고만. 인스턴트 경험(캔버스)은 제외. "URL 매개변수" 필드로 붙인 UTM은 라이브러리에 안 보일 수 있음 |
-| Google | [광고 투명성 센터](https://adstransparency.google.com/?region=KR) (웹앱 내부 RPC) | 미리보기의 `adurl` | 법인명 일치 광고주 ID 자동 탐색. 일부 이미지 소재는 랜딩 URL 비공개 |
+| Google | [광고 투명성 센터](https://adstransparency.google.com/?region=KR) (웹앱 내부 RPC) | 미리보기의 `adurl` | **광고주 도메인으로 검색**(법인명이 달라도 됨: 헤라 → hera.com → (주)아모레퍼시픽) + 광고주명/Google 법인명 정확 일치. 일부 이미지 소재는 랜딩 URL 비공개 |
 | Naver | 파워링크 더보기 검색결과 (`ad.search.naver.com`) | 노출 도메인/표시 URL | 네이버는 광고 라이브러리가 없어 **검색 키워드 기준**. 클릭 URL(`ader.naver.com`)은 과금되므로 호출하지 않음 → UTM 점검 제외 |
 
 > 광고 클릭 URL(네이버 ader, 구글 doubleclick 등)은 절대 호출하지 않습니다. 광고주에게 클릭 과금이 발생하지 않습니다.
@@ -69,7 +74,8 @@ docker build -t landing-health .
 docker run -p 3000:3000 -v $(pwd)/data:/data -e ADMIN_PASSWORD=change-me landing-health
 ```
 
-- **Render**: New → Web Service → 이 저장소 → Runtime: Docker. 결과 유지하려면 Disk 를 `/data` 에 마운트
+- **Render**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bestsupport-gif/landing-health-check) — `render.yaml` 기본은 Free 플랜.
+  Free 는 15분 유휴 시 잠들고 재시작하면 데이터가 초기화됩니다(기본 광고주 헤라는 자동 재등록·재점검). 유지하려면 Starter + Disk(`/data`)로 변경
 - **Railway / Fly.io**: Dockerfile 자동 인식. Volume 을 `/data` 에 마운트
 
 메모리는 1GB 이상 권장 (Chromium).
