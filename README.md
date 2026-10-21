@@ -65,7 +65,25 @@ node src/cli.js 클리오 --domains clubclio.co.kr --naver "클리오 쿠션"
 | `PUBLIC_URL` | – | 슬랙 메시지의 '전체 결과 보기' 링크용 |
 | `CRON_TOKEN` | – | 외부 스케줄러가 `POST /api/cron` 에 `x-cron-token` 헤더로 전체 점검 호출 |
 
-## 배포 (전용 IP 서울 VPS — 권장)
+## 회사 PC(Windows)에 상시 실행 — 무료
+
+사무실 IP 는 Meta·Google 요청 제한에 거의 걸리지 않아 소재를 전부 가져옵니다.
+
+```powershell
+git clone https://github.com/bestsupport-gif/landing-health-check.git
+cd landing-health-check
+npm ci
+npx playwright install chromium
+powershell -ExecutionPolicy Bypass -File deploy\windows\install-task.ps1
+```
+
+- 로그인하면 자동으로 켜지고(작업 스케줄러 `LandingHealthCheck`), 죽으면 1분 뒤 다시 켜집니다
+- 켜질 때마다 GitHub `main` 최신 코드를 받습니다
+- 환경변수는 저장소 폴더의 `.env` 파일(`ADMIN_PASSWORD=...` 형식), 로그는 `logs\server.log`
+- 팀원은 사내망에서 `http://<이 PC IP>:3000` 으로 접속 (Windows 방화벽에서 Node.js 허용 필요)
+- PC 가 절전 모드로 들어가면 멈추므로 전원 설정에서 절전을 꺼 두세요
+
+## 배포 (전용 IP 서울 VPS)
 
 Render·Vercel 같은 공용 IP 호스팅은 Meta·Google 이 요청 제한(Rate limit / 429)을 걸어 소재를 일부만 가져옵니다.
 **전용 IP 가 있는 서울 VPS** 에 올리는 것을 권장합니다. 설치 스크립트: [`deploy/vps-setup.sh`](deploy/vps-setup.sh)
