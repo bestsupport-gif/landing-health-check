@@ -48,6 +48,21 @@ const PAGINATION_NAME = 'AdLibrarySearchPaginationQuery';
 // 광고 라이브러리 웹앱의 검색 페이지네이션 쿼리 ID (바뀌면 META_PAGINATION_DOC_ID 로 덮어쓰기)
 const PAGINATION_DOC_ID = '24922295957467452';
 
+// 광고주 페이지 화면을 여는 조건 조합 (게재 시작일 구간 × 소재 유형 × 정렬). 각 조합의 첫 화면이 서로 다른 소재를 보여 준다
+const MEDIA = ['all', 'image', 'video'];
+const SORTS = ['', '&sort_data[mode]=total_impressions&sort_data[direction]=asc'];
+function pageVariants(now = new Date()) {
+  const d = days => new Date(now.getTime() - days * 864e5).toISOString().slice(0, 10);
+  const windows = [
+    '',
+    `&start_date[min]=${d(7)}`,
+    `&start_date[min]=${d(30)}&start_date[max]=${d(8)}`,
+    `&start_date[min]=${d(90)}&start_date[max]=${d(31)}`,
+    `&start_date[max]=${d(91)}`,
+  ];
+  return windows.flatMap(w => SORTS.flatMap(s => MEDIA.map(m => `&media_type=${m}${s}${w}`)));
+}
+
 // 검색 결과 연결의 다음 페이지 커서
 function findPageInfo(node) {
   if (!node || typeof node !== 'object') return null;
@@ -122,7 +137,8 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
       sessionID: crypto.randomUUID(), sortData: null, source: null, startDate: null, viewAllPageID: '0',
     };
     let pages = 0;
-    while (cursor?.has_next_page && cursor.end_cursor && count() < maxAds * 2 && pages < 20) {
+    let paginationBlocked = !!process.env.META_NO_PAGINATION;
+    while (!paginationBlocked && cursor?.has_next_page && cursor.end_cursor && count() < maxAds * 2 && pages < 20) {
       pages++;
       let body;
       if (template) {
@@ -139,9 +155,9 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
           doc_id: process.env.META_PAGINATION_DOC_ID || PAGINATION_DOC_ID,
         }).toString();
       }
-      // 요청 제한(Rate limit)에 걸리면 10초 → 30초 → 60초 기다렸다 다시 시도
+      // 요청 제한(Rate limit)에 걸리면 15초 기다렸다 한 번 더 시도 (안 되면 아래의 '조건별 첫 화면' 방식으로 전환)
       let text = '';
-      for (const wait of [0, 10000, 30000, 60000]) {
+      for (const wait of [0, 15000]) {
         if (wait) { log(`Meta: 요청 제한 — ${wait / 1000}초 후 재시도`); await sleep(wait); }
         text = await page.evaluate(async ({ body, lsd }) => {
           const r = await fetch('/api/graphql/', {
@@ -153,12 +169,45 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
         if (!/Rate limit|1675004/i.test(text)) break;
       }
       const parsed = parseGraphql(text);
-      if (!parsed.length) { log(`Meta: 추가 페이지 요청 실패 (${pages}번째) — ${text.slice(0, 80).replace(/\s+/g, ' ')}`); break; }
+      if (!parsed.length) {
+        log(`Meta: 추가 페이지 요청 실패 (${pages}번째) — ${text.slice(0, 80).replace(/\s+/g, ' ')}`);
+        paginationBlocked = true;
+        break;
+      }
       blobs.push(...parsed);
       cursor = findPageInfo(parsed);
       await sleep(600);
     }
     if (pages) log(`Meta: 첫 화면 ${first}건 + 추가 ${pages}페이지 → ${count()}건`);
+
+    // 데이터센터 IP(GitHub Actions·클라우드)는 '다음 페이지' 요청이 막힌다.
+    // 첫 화면 결과는 막히지 않으므로, 광고주 페이지 전용 화면을 소재 유형·정렬 조건별로 열어 첫 화면을 모은다.
+    if (paginationBlocked && cursor?.has_next_page) {
+      const raws0 = [];
+      collectAds(blobs, raws0);
+      const pageIds = advertiser.metaPageIds?.length
+        ? advertiser.metaPageIds
+        : [...new Set(raws0.map(toAd).filter(a => nameMatches(a.advertiser, names)).map(a => a.pageId).filter(Boolean))];
+      const before = count();
+      let loads = 0;
+      for (const pid of pageIds.slice(0, 3)) {
+        let idle = 0;
+        for (const v of pageVariants()) {
+          if (count() >= maxAds * 2 || idle >= 8) break;
+          const prev = count();
+          const vurl = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=KR&is_targeted_country=false'
+            + `&search_type=page&view_all_page_id=${pid}${v}`;
+          try {
+            await page.goto(vurl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            await sleep(3500);
+            blobs.push(...parseJsonBlobs(await page.content()));
+          } catch {}
+          loads++;
+          idle = count() > prev ? 0 : idle + 1;
+        }
+      }
+      log(`Meta: 다음 페이지 요청이 막혀 광고주 페이지(${pageIds.length}개)를 조건별로 ${loads}번 조회 → ${before}건에서 ${count()}건`);
+    }
 
     const raws = [];
     collectAds(blobs, raws);
