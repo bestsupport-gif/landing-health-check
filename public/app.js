@@ -11,7 +11,21 @@ let result = null;
 let filter = { level: 'issue', type: '', platform: '', q: '' };
 let pollTimer = null;
 
+// GitHub Pages 정적 모드: 서버 API 대신 Actions 가 만든 JSON 을 읽고, 실행·수정은 GitHub 로 연결
+const STATIC = window.STATIC_MODE || null;
+const GH = STATIC && {
+  run: `https://github.com/${STATIC.repo}/actions/workflows/check.yml`,
+  edit: `https://github.com/${STATIC.repo}/edit/main/advertisers.json`,
+};
+const csvUrl = id => (STATIC ? `data/results/${id}.csv` : `/api/advertisers/${id}/report.csv`);
+
 async function api(path, opts = {}) {
+  if (STATIC) {
+    const m = path.match(/^\/api\/advertisers(?:\/([^/]+)\/result)?$/);
+    if (!m || (opts.method && opts.method !== 'GET')) throw new Error('GitHub Pages 버전에서는 GitHub 에서 실행·수정하세요');
+    const r = await fetch(m[1] ? `data/results/${m[1]}.json` : 'data/advertisers.json', { cache: 'no-store' });
+    return r.json();
+  }
   const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', ...(opts.headers || {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
@@ -86,10 +100,13 @@ function render() {
           ${adv.domains?.length ? ` · 도메인 ${esc(adv.domains.join(', '))}` : ''}</div>
       </div>
       <div class="acts">
-        <button class="primary" id="btnRun">지금 점검</button>
-        ${run ? `<a href="/api/advertisers/${adv.id}/report.csv"><button>CSV (On/Off 제안)</button></a>` : ''}
-        <button class="ghost" id="btnEdit">설정</button>
-        <button class="ghost" id="btnDel">삭제</button>
+        ${STATIC
+          ? `<a href="${GH.run}" target="_blank" rel="noopener"><button class="primary">지금 점검 (GitHub)</button></a>`
+          : '<button class="primary" id="btnRun">지금 점검</button>'}
+        ${run ? `<a href="${csvUrl(adv.id)}" download><button>CSV (On/Off 제안)</button></a>` : ''}
+        ${STATIC
+          ? `<a href="${GH.edit}" target="_blank" rel="noopener"><button class="ghost">광고주 설정</button></a>`
+          : '<button class="ghost" id="btnEdit">설정</button><button class="ghost" id="btnDel">삭제</button>'}
       </div>
     </div>
     <div id="jobLog"></div>
@@ -118,9 +135,11 @@ function render() {
     <p class="note">※ 랜딩 URL은 각 매체의 공개 광고 라이브러리에 노출된 값 기준입니다. 네이버는 광고 클릭(과금) URL을 호출하지 않고 표시 URL만 점검하므로 UTM 점검에서 제외됩니다.</p>
     ` : ''}`;
 
-  $('#btnRun').onclick = runNow;
-  $('#btnDel').onclick = del;
-  $('#btnEdit').onclick = edit;
+  if (!STATIC) {
+    $('#btnRun').onclick = runNow;
+    $('#btnDel').onclick = del;
+    $('#btnEdit').onclick = edit;
+  }
   document.querySelectorAll('[data-level]').forEach(b => b.onclick = () => { filter.level = b.dataset.level; render(); });
   const fp = $('#fPlat'); if (fp) fp.onchange = e => { filter.platform = e.target.value; render(); };
   const ft = $('#fType'); if (ft) ft.onchange = e => { filter.type = e.target.value; render(); };
@@ -191,7 +210,7 @@ async function edit() {
   render();
 }
 
-$('#addForm').onsubmit = async e => {
+if (!STATIC) $('#addForm').onsubmit = async e => {
   e.preventDefault();
   const f = new FormData(e.target);
   const body = Object.fromEntries(['name', 'aliases', 'domains', 'naverKeywords', 'googleQuery', 'metaPageIds', 'googleAdvertiserIds'].map(k => [k, f.get(k)]));
@@ -209,13 +228,13 @@ $('#addForm').onsubmit = async e => {
 
 $('#advList').onclick = e => { const el = e.target.closest('.adv'); if (el) select(el.dataset.id); };
 
-$('#btnCheckAll').onclick = async () => {
+if (!STATIC) $('#btnCheckAll').onclick = async () => {
   const r = await api('/api/check-all', { method: 'POST' });
   alert(`${r.queued}개 광고주 점검을 대기열에 넣었습니다`);
   advertisers = await api('/api/advertisers'); renderList();
 };
 
-$('#btnSettings').onclick = async () => {
+if (!STATIC) $('#btnSettings').onclick = async () => {
   const s = await api('/api/settings');
   $('#settingsHint').textContent = `현재: ${s.slackWebhook ? '웹훅 설정됨' : s.slackFromEnv ? '환경변수 웹훅 사용 중' : '알림 꺼짐'} · 정기 점검 주기(cron): ${s.cron}. 새로 생긴 OFF 제안/점검 이슈만 알립니다.`;
   $('#settings').showModal();
@@ -225,6 +244,18 @@ $('#settingsForm').onsubmit = async e => {
   const v = new FormData(e.target).get('slackWebhook');
   try { await api('/api/settings', { method: 'PUT', body: { slackWebhook: v } }); } catch (err) { alert(err.message); }
 };
+
+// 정적 모드: 추가 폼·상단 버튼을 GitHub 링크로 바꾼다
+if (STATIC) {
+  $('#addForm').outerHTML = `<div class="card">
+    <h3>모니터링 광고주 추가·수정</h3>
+    <p class="hint">GitHub 의 <b>advertisers.json</b> 에 광고주를 추가하고 저장(Commit)하면, 자동으로 점검이 돌고 몇 분 뒤 이 페이지에 반영돼요.</p>
+    <a href="${GH.edit}" target="_blank" rel="noopener"><button class="primary" style="width:100%">advertisers.json 편집</button></a>
+    <p class="hint">6시간마다 자동 점검 · 마지막 갱신 ${fmtTime(STATIC.builtAt)}</p>
+  </div>`;
+  $('#btnCheckAll').outerHTML = `<a href="${GH.run}" target="_blank" rel="noopener"><button class="ghost">전체 점검 (GitHub)</button></a>`;
+  $('#btnSettings').remove();
+}
 
 window.onhashchange = () => { const id = location.hash.slice(1); if (id && id !== current && advertisers.some(a => a.id === id)) select(id); };
 loadAdvertisers();

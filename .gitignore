@@ -3,4 +3,6 @@ data/
 .claude/
 *.log
 logs/
+site/
+.state/
 .env

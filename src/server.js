@@ -5,6 +5,7 @@ const cron = require('node-cron');
 const store = require('./store');
 const { runCheck } = require('./runner');
 const { closeBrowser } = require('./browser');
+const { advertiserSummary, toCsv, toReportJson } = require('./report');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -85,11 +86,7 @@ function sanitize(body, base = {}) {
 
 app.get('/api/advertisers', (req, res) => {
   const db = store.load();
-  res.json(db.advertisers.map(a => {
-    const run = db.runs[a.id];
-    const job = [...jobs.values()].reverse().find(j => j.advertiserId === a.id);
-    return { ...a, lastRun: run ? { startedAt: run.startedAt, summary: run.summary, platformStatus: run.platformStatus } : null, job: job && { id: job.id, status: job.status } };
-  }));
+  res.json(db.advertisers.map(a => advertiserSummary(a, db.runs[a.id], [...jobs.values()].reverse().find(j => j.advertiserId === a.id))));
 });
 
 app.post('/api/advertisers', async (req, res) => {
@@ -138,19 +135,15 @@ app.get('/api/advertisers/:id/report.csv', (req, res) => {
   const adv = db.advertisers.find(a => a.id === req.params.id);
   const run = db.runs[req.params.id];
   if (!adv || !run) return res.status(404).send('결과 없음');
-  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = ['플랫폼', '소재ID', '광고주(노출명)', '소재', '제안', '심각도', '이슈', '랜딩URL', '최종URL', 'HTTP', '랜딩가격', '소재링크', '점검시각'];
-  const lines = run.rows.map(r => [r.platform, r.adId, r.advertiser, r.title, r.action, r.level, r.issues.map(i => i.msg).join(' / '),
-    r.landingUrl, r.finalUrl, r.httpStatus, r.price, r.adUrl, run.startedAt].map(esc).join(','));
   res.set('content-type', 'text/csv; charset=utf-8');
   res.set('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${adv.name}_랜딩헬스체크.csv`)}`);
-  res.send('﻿' + [head.map(esc).join(','), ...lines].join('\n'));
+  res.send(toCsv(run));
 });
 
 app.get('/api/advertisers/:id/report.json', (req, res) => {
   const run = store.load().runs[req.params.id];
   if (!run) return res.status(404).json({ error: '결과 없음' });
-  res.json({ ...run, rows: run.rows.map(r => ({ platform: r.platform, adId: r.adId, action: r.action, level: r.level, issues: r.issues, landingUrl: r.landingUrl })) });
+  res.json(toReportJson(run));
 });
 
 app.get('/api/jobs/:id', (req, res) => {

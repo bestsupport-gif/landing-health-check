@@ -1,0 +1,13 @@
+[
+  {
+    "id": "hera",
+    "name": "헤라",
+    "aliases": ["HERA"],
+    "domains": ["hera.com", "brand.naver.com/hera"],
+    "naverKeywords": ["헤라"],
+    "googleQuery": "",
+    "metaPageIds": [],
+    "googleAdvertiserIds": [],
+    "platforms": { "meta": true, "google": true, "naver": true }
+  }
+]
