@@ -1,0 +1,58 @@
+name: 랜딩 헬스체크
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'        # 6시간마다 (UTC 기준 0·6·12·18시 = 한국 9·15·21·3시)
+  workflow_dispatch:              # Actions 탭의 "Run workflow" 버튼으로 바로 점검
+  push:
+    branches: [main]
+    paths:
+      - advertisers.json          # 광고주 추가·수정 시 바로 점검
+      - src/**
+      - public/**
+      - .github/workflows/check.yml
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: landing-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: 점검 실행 + 사이트 생성
+        run: node src/static-build.js
+        env:
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+          BROWSER_CONCURRENCY: '2'
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PUBLIC_URL: ${{ steps.pages.outputs.base_url }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
