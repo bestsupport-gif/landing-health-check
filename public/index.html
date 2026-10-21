@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>랜딩 헬스체크</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span>랜딩 헬스체크 <small>Meta · Google · Naver</small></div>
+  <div class="top-actions">
+    <button class="ghost" id="btnCheckAll">전체 점검</button>
+    <button class="ghost" id="btnSettings">알림 설정</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <form id="addForm" class="card">
+      <h3>모니터링 광고주 추가</h3>
+      <label>광고주명 <input name="name" placeholder="예) 클리오" required></label>
+      <details>
+        <summary>정확도 옵션</summary>
+        <label>다른 이름(별칭) <input name="aliases" placeholder="클럽클리오, CLIO"></label>
+        <label>광고주 도메인 <input name="domains" placeholder="clubclio.co.kr"></label>
+        <label>네이버 검색 키워드 <input name="naverKeywords" placeholder="클리오 쿠션, 클리오 립"></label>
+        <label>Meta 페이지 ID <input name="metaPageIds" placeholder="(선택) 숫자 ID"></label>
+        <label>Google 광고주 ID <input name="googleAdvertiserIds" placeholder="(선택) AR로 시작"></label>
+      </details>
+      <div class="chk">
+        <label><input type="checkbox" name="meta" checked> Meta</label>
+        <label><input type="checkbox" name="google" checked> Google</label>
+        <label><input type="checkbox" name="naver" checked> Naver</label>
+      </div>
+      <button type="submit" class="primary">추가하고 바로 점검</button>
+    </form>
+    <div id="advList" class="adv-list"></div>
+  </aside>
+
+  <main id="main">
+    <div class="empty">
+      <h2>광고주명을 넣으면 집행 중인 소재의 랜딩을 점검해요</h2>
+      <p>404 · 품절 · 가격 변경 · UTM 누락을 찾고, 문제 소재는 <b>OFF 제안</b>으로 표시합니다.</p>
+    </div>
+  </main>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h3>알림 설정</h3>
+    <label>슬랙 Incoming Webhook URL
+      <input name="slackWebhook" placeholder="https://hooks.slack.com/services/..." autocomplete="off">
+    </label>
+    <p class="hint" id="settingsHint"></p>
+    <div class="row-end">
+      <button value="cancel" class="ghost">닫기</button>
+      <button value="save" class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
