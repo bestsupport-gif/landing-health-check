@@ -139,13 +139,19 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
           doc_id: process.env.META_PAGINATION_DOC_ID || PAGINATION_DOC_ID,
         }).toString();
       }
-      const text = await page.evaluate(async ({ body, lsd }) => {
-        const r = await fetch('/api/graphql/', {
-          method: 'POST', credentials: 'include', body,
-          headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-fb-lsd': lsd || '', 'x-fb-friendly-name': 'AdLibrarySearchPaginationQuery' },
-        });
-        return r.text();
-      }, { body, lsd }).catch(() => '');
+      // 요청 제한(Rate limit)에 걸리면 10초 → 30초 → 60초 기다렸다 다시 시도
+      let text = '';
+      for (const wait of [0, 10000, 30000, 60000]) {
+        if (wait) { log(`Meta: 요청 제한 — ${wait / 1000}초 후 재시도`); await sleep(wait); }
+        text = await page.evaluate(async ({ body, lsd }) => {
+          const r = await fetch('/api/graphql/', {
+            method: 'POST', credentials: 'include', body,
+            headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-fb-lsd': lsd || '', 'x-fb-friendly-name': 'AdLibrarySearchPaginationQuery' },
+          });
+          return r.text();
+        }, { body, lsd }).catch(() => '');
+        if (!/Rate limit|1675004/i.test(text)) break;
+      }
       const parsed = parseGraphql(text);
       if (!parsed.length) { log(`Meta: 추가 페이지 요청 실패 (${pages}번째) — ${text.slice(0, 80).replace(/\s+/g, ' ')}`); break; }
       blobs.push(...parsed);

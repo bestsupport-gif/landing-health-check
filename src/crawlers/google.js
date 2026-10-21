@@ -1,18 +1,23 @@
 // Google 광고 투명성 센터 크롤러 (공개 웹앱이 쓰는 내부 RPC 를 그대로 호출)
-const { UA_DESKTOP, norm, pool, fetchWithTimeout } = require('../util');
+const { UA_DESKTOP, norm, pool, fetchWithTimeout, sleep } = require('../util');
 
 const BASE = 'https://adstransparency.google.com/anji/_/rpc/';
 const REGION_KR = 2410;
 const FORMAT = { 1: '텍스트', 2: '이미지', 3: '동영상' };
 
 async function rpc(svc, req) {
-  const r = await fetchWithTimeout(`${BASE}${svc}?authuser=0`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': UA_DESKTOP },
-    body: 'f.req=' + encodeURIComponent(JSON.stringify(req)),
-  });
-  if (!r.ok) throw new Error(`Google RPC ${svc} HTTP ${r.status}`);
-  return JSON.parse(await r.text());
+  // 429(요청 과다)·5xx 는 10초 → 30초 → 60초 기다렸다 재시도
+  for (const wait of [0, 10000, 30000, 60000]) {
+    if (wait) await sleep(wait);
+    const r = await fetchWithTimeout(`${BASE}${svc}?authuser=0`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': UA_DESKTOP },
+      body: 'f.req=' + encodeURIComponent(JSON.stringify(req)),
+    });
+    if (r.ok) return JSON.parse(await r.text());
+    if (r.status !== 429 && r.status < 500) throw new Error(`Google RPC ${svc} HTTP ${r.status}`);
+    if (wait === 60000) throw new Error(`Google RPC ${svc} HTTP ${r.status} (재시도 후에도 요청 제한)`);
+  }
 }
 
 async function findAdvertisers(query) {
