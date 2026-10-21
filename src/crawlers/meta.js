@@ -1,4 +1,5 @@
 // Meta 광고 라이브러리 크롤러 (로그인/API 없이 공개 페이지를 헤드리스 브라우저로 연다)
+const crypto = require('crypto');
 const { withPage } = require('../browser');
 const { nameMatches, sleep } = require('../util');
 
@@ -43,6 +44,22 @@ function parseGraphql(text) {
   return out;
 }
 
+const PAGINATION_NAME = 'AdLibrarySearchPaginationQuery';
+// 광고 라이브러리 웹앱의 검색 페이지네이션 쿼리 ID (바뀌면 META_PAGINATION_DOC_ID 로 덮어쓰기)
+const PAGINATION_DOC_ID = '24922295957467452';
+
+// 검색 결과 연결의 다음 페이지 커서
+function findPageInfo(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const x of node) { const r = findPageInfo(x); if (r) return r; }
+    return null;
+  }
+  if (node.search_results_connection?.page_info) return node.search_results_connection.page_info;
+  for (const k in node) { const r = findPageInfo(node[k]); if (r) return r; }
+  return null;
+}
+
 function toAd(raw) {
   const s = raw.snapshot || {};
   const urls = new Set();
@@ -73,29 +90,69 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
 
   return withPage(async page => {
     const blobs = [];
+    let template = null; // 브라우저가 실제로 보낸 페이지네이션 요청 본문 (있으면 그대로 재사용)
+    page.on('request', r => {
+      if (!template && r.url().includes('/api/graphql') && (r.postData() || '').includes(PAGINATION_NAME)) template = r.postData();
+    });
     page.on('response', async r => {
       if (!r.url().includes('/api/graphql')) return;
       try { blobs.push(...parseGraphql(await r.text())); } catch {}
     });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await sleep(5000);
-    blobs.push(...parseJsonBlobs(await page.content()));
+    const html = await page.content();
+    blobs.push(...parseJsonBlobs(html));
+    const count = () => { const f = []; collectAds(blobs, f); return new Set(f.map(a => a.ad_archive_id)).size; };
+    const first = count();
 
-    // 스크롤하며 추가 결과 로드 (느린 서버에서도 응답을 기다리도록 최대 8초까지 대기, 2번 연속 늘지 않으면 종료)
-    const count = () => { const f = []; collectAds(blobs, f); return f.length; };
-    let stalls = 0;
-    for (let i = 0; i < 15 && stalls < 2; i++) {
-      const before = count();
-      if (before >= maxAds * 2) break;
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.mouse.wheel(0, 4000);
-      let grew = false;
-      for (let t = 0; t < 16; t++) {
-        await sleep(500);
-        if (count() > before) { grew = true; break; }
+    // 스크롤 대신 페이지네이션 요청을 직접 호출한다.
+    // (서버의 헤드리스 환경에서는 스크롤로 추가 로드가 안 일어나는 경우가 많다)
+    let cursor = findPageInfo(blobs);
+    // 페이지가 실제 요청에 붙이는 공통 파라미터(lsd, __dyn, __rev 등)를 페이지 모듈에서 그대로 가져온다
+    const common = await page.evaluate(() => {
+      try { return { ...window.require('getAsyncParams')('POST') }; } catch {}
+      try { return { lsd: window.require('LSD').token, __a: '1', __user: '0' }; } catch {}
+      return null;
+    }).catch(() => null);
+    const lsd = common?.lsd;
+    const baseVars = {
+      activeStatus: 'active', adType: 'ALL', bylines: [], collationToken: null, contentLanguages: [], countries: ['KR'],
+      excludedIDs: null, first: 30, isTargetedCountry: false, location: null, mediaType: 'all', multiCountryFilterMode: null,
+      pageIDs: [], potentialReachInput: null, publisherPlatforms: [], queryString: q, regions: null, searchType: 'keyword_unordered',
+      sessionID: crypto.randomUUID(), sortData: null, source: null, startDate: null, viewAllPageID: '0',
+    };
+    let pages = 0;
+    while (cursor?.has_next_page && cursor.end_cursor && count() < maxAds * 2 && pages < 20) {
+      pages++;
+      let body;
+      if (template) {
+        const p = new URLSearchParams(template);
+        const v = JSON.parse(p.get('variables'));
+        p.set('variables', JSON.stringify({ ...v, cursor: cursor.end_cursor, first: 30 }));
+        body = p.toString();
+      } else {
+        if (!lsd) break;
+        body = new URLSearchParams({
+          av: '0', __user: '0', __a: '1', __comet_req: '1', ...common, server_timestamps: 'true',
+          fb_api_caller_class: 'RelayModern', fb_api_req_friendly_name: PAGINATION_NAME,
+          variables: JSON.stringify({ ...baseVars, cursor: cursor.end_cursor }),
+          doc_id: process.env.META_PAGINATION_DOC_ID || PAGINATION_DOC_ID,
+        }).toString();
       }
-      stalls = grew ? 0 : stalls + 1;
+      const text = await page.evaluate(async ({ body, lsd }) => {
+        const r = await fetch('/api/graphql/', {
+          method: 'POST', credentials: 'include', body,
+          headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-fb-lsd': lsd || '', 'x-fb-friendly-name': 'AdLibrarySearchPaginationQuery' },
+        });
+        return r.text();
+      }, { body, lsd }).catch(() => '');
+      const parsed = parseGraphql(text);
+      if (!parsed.length) { log(`Meta: 추가 페이지 요청 실패 (${pages}번째) — ${text.slice(0, 80).replace(/\s+/g, ' ')}`); break; }
+      blobs.push(...parsed);
+      cursor = findPageInfo(parsed);
+      await sleep(600);
     }
+    if (pages) log(`Meta: 첫 화면 ${first}건 + 추가 ${pages}페이지 → ${count()}건`);
 
     const raws = [];
     collectAds(blobs, raws);
