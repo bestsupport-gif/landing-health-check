@@ -65,6 +65,18 @@ node src/cli.js 클리오 --domains clubclio.co.kr --naver "클리오 쿠션"
 | `PUBLIC_URL` | – | 슬랙 메시지의 '전체 결과 보기' 링크용 |
 | `CRON_TOKEN` | – | 외부 스케줄러가 `POST /api/cron` 에 `x-cron-token` 헤더로 전체 점검 호출 |
 
+## GitHub Actions + Pages (무료, 현재 운영 방식)
+
+**결과 페이지: https://bestsupport-gif.github.io/landing-health-check/**
+
+- `.github/workflows/check.yml` 이 6시간마다(한국 9·15·21·3시) GitHub 서버에서 점검하고 결과를 Pages 에 올립니다
+- **광고주 추가·수정**: [`advertisers.json`](advertisers.json) 을 GitHub 에서 편집해 커밋 → 바로 점검 실행
+- **지금 점검**: Actions 탭 → 랜딩 헬스체크 → Run workflow
+- 슬랙 알림: 저장소 Settings → Secrets → Actions 에 `SLACK_WEBHOOK_URL` 추가
+- 이전 점검 상태(가격 이력·신규 이슈 판단)는 배포된 `data/state.json` 에서 이어받습니다
+- 한계: GitHub 서버 IP 에서는 Meta 의 '다음 페이지' 요청이 막혀, 광고주 페이지를 기간·유형·정렬 조건별로 나눠 조회합니다 (헤라 기준 약 150건 중 56건, 노출 많은 순·최근 시작순 우선). 전체가 필요하면 아래 회사 PC 방식으로 돌리세요
+- 결과 페이지는 공개입니다 (주소를 아는 누구나 열람 가능)
+
 ## 회사 PC(Windows)에 상시 실행 — 무료
 
 사무실 IP 는 Meta·Google 요청 제한에 거의 걸리지 않아 소재를 전부 가져옵니다.
