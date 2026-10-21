@@ -81,15 +81,20 @@ async function crawlMeta(advertiser, { maxAds = 150, log = () => {} } = {}) {
     await sleep(5000);
     blobs.push(...parseJsonBlobs(await page.content()));
 
-    // 스크롤하며 추가 결과 로드
-    let last = -1;
-    for (let i = 0; i < 12; i++) {
-      const found = [];
-      collectAds(blobs, found);
-      if (found.length >= maxAds * 2 || found.length === last) break;
-      last = found.length;
-      await page.mouse.wheel(0, 20000);
-      await sleep(2500);
+    // 스크롤하며 추가 결과 로드 (느린 서버에서도 응답을 기다리도록 최대 8초까지 대기, 2번 연속 늘지 않으면 종료)
+    const count = () => { const f = []; collectAds(blobs, f); return f.length; };
+    let stalls = 0;
+    for (let i = 0; i < 15 && stalls < 2; i++) {
+      const before = count();
+      if (before >= maxAds * 2) break;
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.mouse.wheel(0, 4000);
+      let grew = false;
+      for (let t = 0; t < 16; t++) {
+        await sleep(500);
+        if (count() > before) { grew = true; break; }
+      }
+      stalls = grew ? 0 : stalls + 1;
     }
 
     const raws = [];
