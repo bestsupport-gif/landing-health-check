@@ -65,16 +65,25 @@ node src/cli.js 클리오 --domains clubclio.co.kr --naver "클리오 쿠션"
 | `PUBLIC_URL` | – | 슬랙 메시지의 '전체 결과 보기' 링크용 |
 | `CRON_TOKEN` | – | 외부 스케줄러가 `POST /api/cron` 에 `x-cron-token` 헤더로 전체 점검 호출 |
 
-## 배포 (AWS Lightsail 서울 — 권장)
+## 배포 (전용 IP 서울 VPS — 권장)
 
 Render·Vercel 같은 공용 IP 호스팅은 Meta·Google 이 요청 제한(Rate limit / 429)을 걸어 소재를 일부만 가져옵니다.
-**전용 IP 가 있는 서울 VPS** 에 올리는 것을 권장합니다.
+**전용 IP 가 있는 서울 VPS** 에 올리는 것을 권장합니다. 설치 스크립트: [`deploy/vps-setup.sh`](deploy/vps-setup.sh)
 
-1. Lightsail → Create instance → 리전 **Seoul (ap-northeast-2)** → Linux/Unix → OS Only → **Ubuntu 24.04**
-2. "Add launch script" 에 [`deploy/lightsail-setup.sh`](deploy/lightsail-setup.sh) 내용을 그대로 붙여 넣기
-3. 플랜: **1GB RAM 이상** ($7/월~) — 스크립트가 스왑 2GB 를 추가합니다
-4. 생성 후 Networking 탭에서 **Static IP** 연결(무료), IPv4 방화벽에 **HTTP 80** 허용
-5. 5~10분 뒤 `http://<고정IP>` 접속. 아이디는 아무거나, 비밀번호는 브라우저 SSH 에서 `sudo cat /etc/landing-health.env`
+### Oracle Cloud Always Free (무료)
+1. 홈 리전 **South Korea Central (Seoul)** 또는 **North (Chuncheon)** 로 가입
+2. Compute → Instances → Create instance
+   - Image: **Canonical Ubuntu 24.04** / Shape: **VM.Standard.A1.Flex** (Always Free, 예: 2 OCPU · 12GB)
+   - Networking: 새 VCN + 공용 서브넷, **Assign public IPv4 address**
+   - Advanced options → Management → **Paste cloud-init script** 에 `deploy/vps-setup.sh` 내용 붙여 넣기
+3. VCN → Security List → Ingress rule 추가: Source `0.0.0.0/0`, TCP, 대상 포트 **80**
+4. 10분쯤 뒤 `http://<공인IP>` 접속
+
+### AWS Lightsail
+Seoul 리전 · Ubuntu 24.04 · 1GB 이상 플랜, "Add launch script" 에 `deploy/vps-setup.sh` 붙여 넣기, Static IP 연결 + 방화벽 HTTP 80 허용.
+
+### 공통
+- 아이디는 아무거나, 비밀번호는 SSH 에서 `sudo cat /etc/landing-health.env`
 
 - GitHub `main` 에 push 하면 **10분 안에 자동 재배포**됩니다 (`sudo landing-update --force` 로 즉시 배포)
 - 데이터는 `/var/lib/landing-health` 에 저장되어 재배포해도 유지됩니다

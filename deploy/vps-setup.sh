@@ -1,6 +1,8 @@
 #!/bin/bash
-# AWS Lightsail (Ubuntu 24.04) 첫 부팅 스크립트.
-# 인스턴스 생성 화면의 "Launch script" 칸에 이 파일 내용을 그대로 붙여 넣으면 된다.
+# Ubuntu 24.04 VPS 첫 부팅 스크립트 (Oracle Cloud Always Free / AWS Lightsail 등, x86·ARM 모두).
+# 인스턴스 생성 화면의 cloud-init 칸에 이 파일 내용을 그대로 붙여 넣으면 된다.
+#  - Oracle: Advanced options → Management → "Paste cloud-init script"
+#  - Lightsail: "Add launch script"
 #  - Docker 설치, 저장소 클론, 컨테이너 실행 (80 포트)
 #  - 접속 비밀번호(ADMIN_PASSWORD) 자동 생성 → /etc/landing-health.env
 #  - 10분마다 GitHub main 브랜치 변경을 확인해 자동 재배포
@@ -24,6 +26,13 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y docker.io git openssl
 systemctl enable --now docker
+
+# Oracle Cloud 의 Ubuntu 이미지는 iptables 가 22번 외 모든 포트를 막는다 → 80 허용
+if [ -f /etc/iptables/rules.v4 ] && ! iptables -C INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null; then
+  iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+  netfilter-persistent save || iptables-save > /etc/iptables/rules.v4
+  systemctl restart docker   # Docker 포워딩 규칙을 다시 맨 앞에 넣는다
+fi
 
 if [ ! -d "$APP/.git" ]; then git clone "$REPO" "$APP"; fi
 mkdir -p "$DATA"
