@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "랜딩 헬스체크",
+  "version": "1.0.0",
+  "description": "Meta·Google·Naver 집행 소재의 랜딩 404·품절·가격·UTM 점검 결과를 툴바에서 바로 확인",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "랜딩 헬스체크",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["alarms", "notifications", "storage", "tabs"],
+  "host_permissions": ["https://bestsupport-gif.github.io/*"]
+}

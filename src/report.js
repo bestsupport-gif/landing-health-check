@@ -3,7 +3,7 @@
 function advertiserSummary(adv, run, job) {
   return {
     ...adv,
-    lastRun: run ? { startedAt: run.startedAt, summary: run.summary, platformStatus: run.platformStatus } : null,
+    lastRun: run ? { startedAt: run.startedAt, summary: run.summary, platformStatus: run.platformStatus, newIssueCount: run.newIssueCount || 0 } : null,
     job: job ? { id: job.id, status: job.status } : null,
   };
 }

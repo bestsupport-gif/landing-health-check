@@ -13,6 +13,7 @@ const store = require('./store');
 const { runCheck } = require('./runner');
 const { closeBrowser } = require('./browser');
 const { advertiserSummary, toCsv, toReportJson } = require('./report');
+const { zipDir } = require('./zip');
 
 async function restoreState() {
   const base = (process.env.PAGES_URL || '').replace(/\/$/, '');
@@ -75,6 +76,8 @@ function writeFile(rel, content) {
     }
   }
   writeFile('data/state.json', JSON.stringify(db));
+  // 크롬 확장 프로그램 배포 파일 (결과 페이지에서 내려받아 설치)
+  writeFile('landing-health-extension.zip', zipDir(path.join(ROOT, 'extension'), 'landing-health-extension'));
   writeFile('.nojekyll', '');
   console.log(`\n사이트 생성 완료: ${SITE}`);
 })().catch(async e => {

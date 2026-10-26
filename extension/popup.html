@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>랜딩 헬스체크</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="dot"></span>랜딩 헬스체크</div>
+  <button class="icon" id="btnReload" title="새로고침">↻</button>
+</header>
+<div id="updated" class="muted"></div>
+<section id="tabBox" hidden></section>
+<nav id="advTabs"></nav>
+<section id="summary"></section>
+<div id="filters" class="chips"></div>
+<ul id="rows"></ul>
+<footer>
+  <a id="lnkPage" target="_blank"><button>전체 결과</button></a>
+  <a id="lnkCsv" target="_blank"><button>CSV</button></a>
+  <a id="lnkRun" target="_blank"><button class="primary">지금 점검</button></a>
+  <a id="lnkEdit" target="_blank"><button>광고주 추가</button></a>
+</footer>
+<script src="common.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

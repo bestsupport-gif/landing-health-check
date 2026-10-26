@@ -252,6 +252,12 @@ if (STATIC) {
     <p class="hint">GitHub 의 <b>advertisers.json</b> 에 광고주를 추가하고 저장(Commit)하면, 자동으로 점검이 돌고 몇 분 뒤 이 페이지에 반영돼요.</p>
     <a href="${GH.edit}" target="_blank" rel="noopener"><button class="primary" style="width:100%">advertisers.json 편집</button></a>
     <p class="hint">6시간마다 자동 점검 · 마지막 갱신 ${fmtTime(STATIC.builtAt)}</p>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>크롬 확장 프로그램</h3>
+    <p class="hint">이 페이지에 들어오지 않아도 툴바 아이콘에서 결과·문제 개수를 보고, 새 문제가 생기면 알림을 받아요.</p>
+    <a href="landing-health-extension.zip" download><button class="primary" style="width:100%">확장 프로그램 받기 (.zip)</button></a>
+    <p class="hint">설치: 압축 풀기 → 크롬 주소창에 <b>chrome://extensions</b> → 오른쪽 위 <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b> → 압축 푼 <b>landing-health-extension</b> 폴더 선택</p>
   </div>`;
   $('#btnCheckAll').outerHTML = `<a href="${GH.run}" target="_blank" rel="noopener"><button class="ghost">전체 점검 (GitHub)</button></a>`;
   $('#btnSettings').remove();
