@@ -65,31 +65,37 @@ async function searchCreatives(filter, maxAds) {
 
 const hostOnly = d => String(d).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\.|^m\./, '').split('/')[0];
 
-// 소재 수집 경로 2가지를 합친다
-//  1) 광고주 도메인으로 검색 — 법인명이 브랜드명과 달라도 됨 (예: 헤라 → hera.com → (주)아모레퍼시픽 소재)
-//  2) 광고주명(또는 Google 법인명) 정확 일치 광고주 ID
+// 소재 수집 경로 2가지를 합친다 — 둘 다 '우리 광고주 명의'로 집행된 소재만 남긴다
+//  1) 광고주명(또는 Google 법인명 googleQuery) 정확 일치 광고주 ID
+//  2) 광고주 도메인으로 검색 — 단, 광고주명이 일치하는 소재만
+//     (도메인 검색은 다른 회사가 그 도메인으로 보낸 광고도 섞인다. 예: 사람인에 채용공고를 낸 다른 회사)
+//     브랜드명과 Google 법인명이 다르면 googleQuery 에 법인명을 넣는다 (예: 헤라 → (주)아모레퍼시픽)
 async function crawlGoogle(advertiser, { maxAds = 150, log = () => {} } = {}) {
   const creatives = new Map();
   const add = list => list.forEach(c => { if (!creatives.has(c['2'])) creatives.set(c['2'], c); });
-
-  const domains = [...new Set((advertiser.domains || []).map(hostOnly).filter(d => d.includes('.') && !/naver\.com$|kakao\.com$|instagram\.com$|facebook\.com$/.test(d)))];
-  for (const d of domains) {
-    const list = await searchCreatives({ 12: { 1: d, 2: true } }, maxAds);
-    log(`Google: 도메인 ${d} 소재 ${list.length}건`);
-    add(list);
-  }
+  const names = [advertiser.googleQuery, advertiser.name, ...(advertiser.aliases || [])].filter(Boolean);
+  const isOurs = n => names.some(x => norm(x) === norm(n));
 
   let ids = advertiser.googleAdvertiserIds || [];
   if (!ids.length) {
-    const names = [advertiser.googleQuery, advertiser.name, ...(advertiser.aliases || [])].filter(Boolean);
     const found = [];
     for (const n of names) found.push(...await findAdvertisers(n));
     // 정확 일치만 사용 (부분 일치는 '헤라' → '헤라주' 같은 오탐이 생김)
-    const picked = found.filter(a => (!a.country || a.country === 'KR') && names.some(n => norm(n) === norm(a.name)));
+    const picked = found.filter(a => (!a.country || a.country === 'KR') && isOurs(a.name));
     ids = [...new Set(picked.map(a => a.id))];
     if (ids.length) log(`Google: 광고주명 일치 ID ${ids.length}개 (${[...new Set(picked.map(a => a.name))].join(', ')})`);
   }
   if (ids.length) add(await searchCreatives({ 13: { 1: ids } }, maxAds));
+
+  const domains = [...new Set((advertiser.domains || []).map(hostOnly).filter(d => d.includes('.') && !/naver\.com$|kakao\.com$|instagram\.com$|facebook\.com$/.test(d)))];
+  for (const d of domains) {
+    const list = await searchCreatives({ 12: { 1: d, 2: true } }, maxAds * 2);
+    const mine = list.filter(c => ids.includes(c['1']) || isOurs(c['12'] || ''));
+    const others = [...new Set(list.filter(c => !mine.includes(c)).map(c => c['12']))];
+    log(`Google: 도메인 ${d} 소재 ${list.length}건 중 광고주명 일치 ${mine.length}건`
+      + (others.length ? ` (제외: ${others.slice(0, 5).join(', ')}${others.length > 5 ? ` 외 ${others.length - 5}곳` : ''})` : ''));
+    add(mine);
+  }
 
   if (!creatives.size) {
     log('Google: 소재를 찾지 못함 — 광고주 도메인 또는 Google 법인명을 설정하세요');
