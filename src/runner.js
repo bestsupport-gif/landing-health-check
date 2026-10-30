@@ -3,7 +3,7 @@ const { crawlMeta } = require('./crawlers/meta');
 const { crawlGoogle } = require('./crawlers/google');
 const { crawlNaver } = require('./crawlers/naver');
 const { checkUrl, missingUtm, urlKey, adPrices } = require('./checker');
-const { pool } = require('./util');
+const { pool, norm } = require('./util');
 const store = require('./store');
 const { notify } = require('./notify');
 
@@ -27,10 +27,17 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
   // 1) 소재 수집
   const ads = [];
   const platformStatus = {};
+  // 이름이 비슷한 다른 광고주(예: 사람인 ↔ 사람인HS)는 excludeNames 로 뺀다
+  const excluded = (adv.excludeNames || []).map(norm).filter(Boolean);
   for (const p of platforms) {
     log(`${p} 소재 수집 중...`);
     try {
-      const list = await CRAWLERS[p](adv, { log });
+      let list = await CRAWLERS[p](adv, { log });
+      if (excluded.length) {
+        const before = list.length;
+        list = list.filter(a => !excluded.some(x => norm(a.advertiser).includes(x)));
+        if (list.length < before) log(`${p}: 제외 광고주(${adv.excludeNames.join(', ')}) ${before - list.length}건 제외`);
+      }
       ads.push(...list);
       platformStatus[p] = { ok: true, ads: list.length };
     } catch (e) {
@@ -72,12 +79,10 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
         issues.push({ type: 'skipped', level: 'info', msg: 'Meta 인스턴트 경험/SNS 링크 — 점검 제외' });
       }
       const appStore = u && APP_STORE_RE.test(u);
-      if (r && !ad.utmNotApplicable && !appStore) {
+      // Meta 는 'URL 매개변수' 필드로 붙인 UTM 이 라이브러리에 안 보여 확인할 수 없으므로 UTM 점검을 하지 않는다
+      if (r && !ad.utmNotApplicable && !appStore && ad.platform !== 'meta') {
         const miss = missingUtm(u, r.finalUrl);
-        if (miss.length) {
-          const note = ad.platform === 'meta' ? ' — Meta "URL 매개변수" 필드 사용 시 라이브러리에 안 보일 수 있음' : '';
-          issues.push({ type: 'utm_missing', level: 'warn', msg: `UTM 누락: ${miss.join(', ')}${note}` });
-        }
+        if (miss.length) issues.push({ type: 'utm_missing', level: 'warn', msg: `UTM 누락: ${miss.join(', ')}` });
       }
       const pc = u && priceChanges.get(u);
       if (pc) issues.push({ type: 'price_change', level: 'warn', msg: `가격 변경 ${fmt(pc.from)}원 → ${fmt(pc.to)}원` });

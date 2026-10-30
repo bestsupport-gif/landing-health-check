@@ -52,8 +52,10 @@ async function crawlNaver(advertiser, { maxPages = 3, log = () => {} } = {}) {
       const ads = parsePage(await r.text(), kw);
       total += ads.length;
       for (const ad of ads) {
-        const mine = nameMatches(ad.advertiser, names)
-          || (domains.length && (domainMatches('https://' + ad.displayUrl, domains) || ad.landingUrls.some(u => domainMatches(u, domains))));
+        // 도메인을 지정했으면 도메인 일치만 본다 (이름만 비슷한 다른 회사 광고 방지)
+        const mine = domains.length
+          ? domainMatches('https://' + ad.displayUrl, domains) || ad.landingUrls.some(u => domainMatches(u, domains))
+          : nameMatches(ad.advertiser, names);
         if (mine && !byId.has(ad.adId)) byId.set(ad.adId, ad);
       }
       if (ads.length < 25) break;

@@ -70,6 +70,7 @@ function sanitize(body, base = {}) {
     ...base,
     name: String(body.name ?? base.name ?? '').trim(),
     aliases: list(body.aliases ?? base.aliases),
+    excludeNames: list(body.excludeNames ?? base.excludeNames),
     domains: list(body.domains ?? base.domains),
     naverKeywords: list(body.naverKeywords ?? base.naverKeywords),
     metaPageIds: list(body.metaPageIds ?? base.metaPageIds),
