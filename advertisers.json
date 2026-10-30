@@ -1,10 +1,10 @@
 [
   {
-    "id": "hera",
-    "name": "헤라",
-    "aliases": ["HERA"],
-    "domains": ["hera.com", "brand.naver.com/hera"],
-    "naverKeywords": ["헤라"],
+    "id": "saramin",
+    "name": "사람인",
+    "aliases": ["saramin"],
+    "domains": ["saramin.co.kr"],
+    "naverKeywords": ["사람인"],
     "googleQuery": "",
     "metaPageIds": [],
     "googleAdvertiserIds": [],
