@@ -138,7 +138,9 @@ function analyzeHtml(html, finalUrl) {
 
   // 5) 소프트 404: 제목/헤드라인/alert 문구
   const heads = [title, ...$('h1, h2, h3, .error, .alert, #error').slice(0, 15).map((_, e) => $(e).text().trim().slice(0, 120)).get()];
-  const alerts = [...html.matchAll(/alert\(\s*['"]([^'"]{2,120})['"]\s*\)/g)].map(m => m[1]);
+  // 스크립트 안 alert 문구는 오류 분기에만 있는 경우가 많다 → 화면 내용이 거의 없을 때(알림 후 튕기는 페이지)만 본다
+  const bodyText = $('body').clone().find('script, style, noscript').remove().end().text().replace(/\s+/g, ' ').trim();
+  const alerts = bodyText.length < 300 ? [...html.matchAll(/alert\(\s*['"]([^'"]{2,120})['"]\s*\)/g)].map(m => m[1]) : [];
   const hit = [...heads, ...alerts].find(t => SOFT404_RE.test(t));
   if (hit) signals.soft404 = hit.slice(0, 80);
 
