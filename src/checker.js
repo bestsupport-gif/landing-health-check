@@ -212,7 +212,11 @@ async function checkUrl(url, { useBrowserFallback = true } = {}) {
   const out = { url, finalUrl: res.finalUrl, httpStatus: res.status, via: res.via, title: '', price: null, pageType: null, issues };
 
   if (res.status === 0) {
-    issues.push({ type: 'error', level: 'critical', msg: `접속 실패 (${res.error || '응답 없음'})` });
+    // 도메인이 없어진 경우만 확실한 장애. 시간 초과·연결 거부는 해외(점검 서버) 접속 차단일 수 있어 경고로 둔다
+    const dead = /ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED/i.test(res.error || '');
+    issues.push(dead
+      ? { type: 'error', level: 'critical', msg: `접속 실패 — 도메인을 찾을 수 없음 (${res.error})` }
+      : { type: 'error', level: 'warn', msg: `접속 실패 (${res.error || '응답 없음'}) — 해외 접속 차단일 수 있어요, 국내에서 열리는지 확인` });
     return out;
   }
   if (res.status === 404 || res.status === 410) {

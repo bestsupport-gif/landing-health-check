@@ -10,7 +10,8 @@ const { notify } = require('./notify');
 const CRAWLERS = { meta: crawlMeta, google: crawlGoogle, naver: crawlNaver };
 const LEVEL_RANK = { critical: 3, warn: 2, info: 1, ok: 0 };
 // Meta 인스턴트 경험(캔버스) 등 외부 랜딩이 아닌 링크는 점검 대상에서 뺀다
-const APP_STORE_RE = /^https?:\/\/(play\.google\.com|itunes\.apple\.com|apps\.apple\.com|onestore\.co\.kr|m\.onestore\.co\.kr)\//i;
+// 앱스토어 링크와 MMP(에어브릿지·앱스플라이어·애드저스트·브랜치) 추적 링크는 UTM 대신 자체 추적을 쓴다
+const APP_STORE_RE = /^https?:\/\/([\w-]+\.)?(play\.google\.com|itunes\.apple\.com|apps\.apple\.com|onestore\.co\.kr|abr\.ge|airbridge\.io|onelink\.me|adjust\.com|adj\.st|app\.link)\//i;
 const SKIP_URL_RE =/^https?:\/\/(www\.|m\.|l\.)?(fb\.com|facebook\.com|fb\.me|instagram\.com)\//i;
 const ACTION = { critical: 'OFF/랜딩 수정', warn: '점검 필요', info: '수동 확인', ok: '유지' };
 
@@ -70,7 +71,6 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
       } else if (SKIP_URL_RE.test(u)) {
         issues.push({ type: 'skipped', level: 'info', msg: 'Meta 인스턴트 경험/SNS 링크 — 점검 제외' });
       }
-      // 앱 설치 광고(스토어 링크)는 UTM 대신 스토어·MMP 추적을 쓰므로 UTM 점검에서 뺀다
       const appStore = u && APP_STORE_RE.test(u);
       if (r && !ad.utmNotApplicable && !appStore) {
         const miss = missingUtm(u, r.finalUrl);
