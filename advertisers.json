@@ -3,7 +3,7 @@
     "id": "saramin",
     "name": "사람인",
     "aliases": ["saramin"],
-    "excludeNames": ["사람인HS"],
+    "excludeNames": ["사람인HS", "숏뜨"],
     "domains": ["www.saramin.co.kr"],
     "naverKeywords": ["사람인"],
     "googleQuery": "",

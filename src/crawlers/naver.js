@@ -19,7 +19,10 @@ function parsePage(html, keyword) {
     let adId = '';
     const idm = html.match(/nad-a\d+-\d+-\d+/);
     if (idm) adId = idm[0];
-    if (!urls.size && displayUrl) urls.add('https://' + displayUrl.replace(/^https?:\/\//, ''));
+    // 표시 URL 의 경로(예: saramin.co.kr/숏뜨)는 광고주가 꾸며 넣는 문구라 실제 랜딩이 아니다 → 도메인만 점검
+    if (!urls.size && displayUrl) {
+      try { urls.add(new URL('https://' + displayUrl.replace(/^https?:\/\//, '')).origin); } catch {}
+    }
     ads.push({
       platform: 'naver',
       adId: adId || `${site}|${displayUrl}|${title}`,

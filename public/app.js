@@ -115,7 +115,9 @@ function render() {
       <div class="stat crit"><div class="k">OFF/랜딩 수정 (404·직랜딩 품절)</div><div class="v">${s.critical}</div></div>
       <div class="stat warn"><div class="k">점검 필요 (가격·UTM)</div><div class="v">${s.warn}</div></div>
       <div class="stat ok"><div class="k">정상</div><div class="v">${s.ok}</div></div>
-      <div class="stat"><div class="k">집행 소재</div><div class="v">${s.ads}</div></div>
+      <div class="stat"><div class="k">점검 불가 (랜딩 비공개 등)</div><div class="v">${s.info ?? run.rows.filter(r => r.level === 'info').length}</div></div>
+      <div class="stat"><div class="k">집행 소재 (합계)</div><div class="v">${s.ads}</div>
+        <div class="hint">랜딩 URL ${s.urls}개 점검</div></div>
     </div>
     <div class="plats">${Object.entries(run.platformStatus).map(([p, st]) =>
       `<span class="plat ${st.ok ? '' : 'err'}">${PL[p]} ${st.ok ? `소재 ${st.ads}건` : `수집 실패: ${esc(st.error)}`}</span>`).join('')}

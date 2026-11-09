@@ -27,7 +27,8 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
   // 1) 소재 수집
   const ads = [];
   const platformStatus = {};
-  // 이름이 비슷한 다른 광고주(예: 사람인 ↔ 사람인HS)는 excludeNames 로 뺀다
+  // 이름이 비슷한 다른 광고주(예: 사람인 ↔ 사람인HS)나 우리 광고가 아닌 소재(예: 사람인 숏뜨)는
+  // excludeNames 로 뺀다 — 광고주 노출명과 소재 제목 모두에 적용
   const excluded = (adv.excludeNames || []).map(norm).filter(Boolean);
   for (const p of platforms) {
     log(`${p} 소재 수집 중...`);
@@ -35,7 +36,7 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
       let list = await CRAWLERS[p](adv, { log });
       if (excluded.length) {
         const before = list.length;
-        list = list.filter(a => !excluded.some(x => norm(a.advertiser).includes(x)));
+        list = list.filter(a => !excluded.some(x => norm(a.advertiser).includes(x) || norm(a.title).includes(x)));
         if (list.length < before) log(`${p}: 제외 광고주(${adv.excludeNames.join(', ')}) ${before - list.length}건 제외`);
       }
       ads.push(...list);
@@ -115,12 +116,23 @@ async function runCheck(advertiserId, { log = () => {} } = {}) {
   }
   rows.sort((a, b) => (LEVEL_RANK[b.level] || 0) - (LEVEL_RANK[a.level] || 0));
 
+  // 요약은 '소재 1개 = 1건'으로 센다. 랜딩이 여러 개인 소재(캐러셀)는 가장 심각한 결과로 분류
+  // → OFF/수정 + 점검 필요 + 정상 + 점검 불가 = 집행 소재 수
+  const adLevel = new Map();
+  for (const r of rows) {
+    const k = `${r.platform}|${r.adId}`;
+    const cur = adLevel.get(k);
+    if (!cur || LEVEL_RANK[r.level] > LEVEL_RANK[cur]) adLevel.set(k, r.level);
+  }
+  const levels = [...adLevel.values()];
   const summary = {
-    ads: ads.length,
+    ads: adLevel.size,
     urls: urls.length,
-    critical: rows.filter(r => r.level === 'critical').length,
-    warn: rows.filter(r => r.level === 'warn').length,
-    ok: rows.filter(r => r.level === 'ok').length,
+    critical: levels.filter(l => l === 'critical').length,
+    warn: levels.filter(l => l === 'warn').length,
+    ok: levels.filter(l => l === 'ok').length,
+    info: levels.filter(l => l === 'info').length, // 점검 불가: 랜딩 비공개·봇 차단·점검 제외
+    rows: rows.length,
     byType: rows.flatMap(r => r.issues).reduce((m, i) => ((m[i.type] = (m[i.type] || 0) + 1), m), {}),
   };
 
