@@ -10,8 +10,8 @@ const { notify } = require('./notify');
 const CRAWLERS = { meta: crawlMeta, google: crawlGoogle, naver: crawlNaver };
 const LEVEL_RANK = { critical: 3, warn: 2, info: 1, ok: 0 };
 // Meta 인스턴트 경험(캔버스) 등 외부 랜딩이 아닌 링크는 점검 대상에서 뺀다
-// 앱스토어 링크와 MMP(에어브릿지·앱스플라이어·애드저스트·브랜치) 추적 링크는 UTM 대신 자체 추적을 쓴다
-const APP_STORE_RE = /^https?:\/\/([\w-]+\.)?(play\.google\.com|itunes\.apple\.com|apps\.apple\.com|onestore\.co\.kr|abr\.ge|airbridge\.io|onelink\.me|adjust\.com|adj\.st|app\.link)\//i;
+// 앱스토어·유튜브 링크와 MMP(에어브릿지·앱스플라이어·애드저스트·브랜치) 추적 링크는 UTM 을 쓰지 않는다
+const APP_STORE_RE = /^https?:\/\/([\w-]+\.)?(play\.google\.com|itunes\.apple\.com|apps\.apple\.com|onestore\.co\.kr|abr\.ge|airbridge\.io|onelink\.me|adjust\.com|adj\.st|app\.link|youtube\.com|youtu\.be)\//i;
 const SKIP_URL_RE =/^https?:\/\/(www\.|m\.|l\.)?(fb\.com|facebook\.com|fb\.me|instagram\.com)\//i;
 const ACTION = { critical: 'OFF/랜딩 수정', warn: '점검 필요', info: '수동 확인', ok: '유지' };
 
